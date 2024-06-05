@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Add your custom styles here */
+        body {
+            padding-top: 60px;
+        }
+        .carousel-item img {
+            width: 100%;
+            height: auto;
+        }
+        #comment-input {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-dark bg-dark fixed-top">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#">
+                    <span id="username">Username</span>
+                </a>
+                <button class="btn btn-outline-light" onclick="logOut()">Log Out</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div id="carouselExampleIndicators" class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner" id="carousel-inner">
+                <!-- Images will be dynamically added here -->
+            </div>
+            <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Previous</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Next</span>
+            </button>
+        </div>
+
+        <div id="comments-section">
+            <!-- Comments for the selected image will be displayed here -->
+        </div>
+
+        <div id="comment-input">
+            <input type="text" id="comment-text" placeholder="Add a comment">
+            <button class="btn btn-primary" onclick="addComment()">Add Comment</button>
+        </div>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js"></script>
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        // Function to fetch images from Firebase Storage and populate the carousel
+        function populateCarousel() {
+            const carouselInner = document.getElementById('carousel-inner');
+
+            // Clear existing carousel items
+            carouselInner.innerHTML = '';
+
+            // Fetch images from Firebase Storage
+            storage.ref('images').listAll().then(function(result) {
+                result.items.forEach(function(imageRef) {
+                    // Get download URL for each image
+                    imageRef.getDownloadURL().then(function(url) {
+                        // Create carousel item
+                        const carouselItem = document.createElement('div');
+                        carouselItem.classList.add('carousel-item');
+                        if (carouselInner.children.length === 0) {
+                            carouselItem.classList.add('active');
+                        }
+
+                        // Create image element
+                        const image = document.createElement('img');
+                        image.src = url;
+                        image.classList.add('d-block', 'w-100');
+
+                        // Append image to carousel item
+                        carouselItem.appendChild(image);
+
+                        // Append carousel item to carousel inner
+                        carouselInner.appendChild(carouselItem);
+                    }).catch(function(error) {
+                        console.error('Error getting download URL: ', error);
+                    });
+                });
+            }).catch(function(error) {
+                console.error('Error listing images: ', error);
+            });
+        }
+
+        // Function to display comments for the selected image
+        function displayComments(imageIndex) {
+            const commentsSection = document.getElementById('comments-section');
+            commentsSection.innerHTML = '';
+
+            // Fetch comments for the selected image from Firestore
+            db.collection('images').orderBy('timestamp', 'desc').get().then(function(querySnapshot) {
+                querySnapshot.forEach(function(doc) {
+                    const comments = doc.data().comments;
+                    if (comments && comments.length > 0 && doc.id === imageIndex) {
+                        comments.forEach(function(comment) {
+                            const commentElement = document.createElement('div');
+                            commentElement.textContent = comment.user + ': ' + comment.text;
+                            commentsSection.appendChild(commentElement);
+                        });
+                    }
+                });
+            }).catch(function(error) {
+                console.error('Error getting documents: ', error);
+            });
+        }
+
+        // Function to add a comment for the selected image
+        function addComment() {
+            const commentText = document.getElementById('comment-text').value;
+
+            // Add the comment to Firestore
+            const imageIndex = document.querySelector('.carousel-item.active').index; // Get the index of the active carousel item
+            db.collection('images').doc(imageIndex).update({
+                comments: firebase.firestore.FieldValue.arrayUnion({
+                    text: commentText,
+                    user: auth.currentUser.email,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                })
+            }).then(function() {
+                console.log('Comment added successfully');
+                // Refresh comments for the selected image
+                displayComments(imageIndex);
+            }).catch(function(error) {
+                console.error('Error adding comment: ', error);
+            });
+        }
+
+        // Function to log out the user
+        function logOut() {
+            auth.signOut().then(function() {
+                console.log('User signed out successfully');
+                window.location.href = 'index.html'; // Redirect to the login/signup page
+            }).catch(function(error) {
+                console.error('Error signing out: ', error);
+            });
+        }
+
+        // Update
